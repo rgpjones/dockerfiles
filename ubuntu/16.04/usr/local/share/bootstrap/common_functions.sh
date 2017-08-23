@@ -217,6 +217,44 @@ function do_clear_apt_caches() {
   rm -rf /var/lib/apt/lists/*
 }
 
+function set_path_permissions() {
+  local -r READABLE_USERS=($1)
+  local -r WRITEABLE_USERS=($2)
+  local -r PATHS=("${@:3}")
+
+  case "$PERMISSION_MODE" in
+  facl)
+    setfacl -R $(printf '-m user:%s:rwX ' "${WRITEABLE_USERS[@]}") \
+            $(printf '-m default:user:%s:rwX ' "${WRITEABLE_USERS[@]}") \
+            $(printf '-m user:%s:rX ' "${READABLE_USERS[@]}") \
+            $(printf '-m default:user:%s:rX ' "${READABLE_USERS[@]}") \
+            "${PATHS[@]}"
+    chmod -R ug+rw,o-rwx "${PATHS[@]}"
+    ;;
+  stickybit)
+    GROUP="$(printf '%s' "${WRITEABLE_USERS[@]}")"
+
+    if ! getent group "$GROUP" >/dev/null; then
+      groupadd "$GROUP"
+    fi
+
+    for USER in "${WRITEABLE_USERS[@]}"; do
+      usermod -a -G "$GROUP" "$USER"
+    done
+
+    chgrp -R "$GROUP" "${PATHS[@]}"
+    find "${PATHS[@]}" -type d -exec chmod g+ws \;
+    find "${PATHS[@]}" -type f -exec chmod g+w \;
+    ;;
+  chmod)
+     chmod -R a+rw "${PATHS[@]}"
+     ;;
+  *)
+     echo "unsupported permission mode '$PERMISSION_MODE'" >&2
+     ;;
+  esac
+}
+
 function wait_for_remote_ports() (
   set +x
 
