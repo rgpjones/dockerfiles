@@ -4,15 +4,41 @@ export PHP_MEMORY_LIMIT=${PHP_MEMORY_LIMIT:-256M}
 export PHP_OPCACHE_MAX_ACCELERATED_FILES=${PHP_OPCACHE_MAX_ACCELERATED_FILES:-20000}
 export PHP_REALPATH_CACHE_SIZE=${PHP_REALPATH_CACHE_SIZE:-4096K}
 export PHP_REALPATH_CACHE_TTL=${PHP_REALPATH_CACHE_TTL:-600}
-SYMFONY_WEB_APP_ENV_REWRITE=${SYMFONY_WEB_APP_ENV_REWRITE:-false}
-SYMFONY_WEB_APP_ENV_REWRITE="$(convert_to_boolean_string "$SYMFONY_WEB_APP_ENV_REWRITE")"
+export SYMFONY_DOCTRINE_MODE=auto
+SYMFONY_WEB_APP_ENV_REWRITE="$(convert_to_boolean_string "${SYMFONY_WEB_APP_ENV_REWRITE:-false}")"
 export SYMFONY_WEB_APP_ENV_REWRITE
 
 if [ -n "${SYMFONY_APP_ENDPOINT}" ]; then
   echo "deprecated: SYMFONY_APP_ENDPOINT is deprecated. Please rename to APP_ENDPOINT." >&2
 fi
 
-if [ "$SYMFONY_ENV" == "prod" ] || [ "$SYMFONY_WEB_APP_ENV_REWRITE" != "true" ]; then
+if has_composer_package 'symfony/symfony'; then
+  SYMFONY_MAJOR_VERSION_GUESS="$(composer_package_version 'symfony/symfony' | cut -d '.' -f 1)"
+elif has_composer_package 'symfony/framework-bundle'; then
+  SYMFONY_MAJOR_VERSION_GUESS="$(composer_package_version 'symfony/framework-bundle' | cut -d '.' -f 1)"
+elif [ -f "${WORK_DIRECTORY}/bin/console" ]; then
+  SYMFONY_MAJOR_VERSION_GUESS=3
+else
+  SYMFONY_MAJOR_VERSION_GUESS=2
+fi
+
+export SYMFONY_MAJOR_VERSION=${SYMFONY_MAJOR_VERSION:-${SYMFONY_MAJOR_VERSION_GUESS}}
+
+if has_composer_package 'symfony/flex'; then
+  SYMFONY_FLEX="$(convert_to_boolean_string "${SYMFONY_FLEX:-true}")"
+else
+  SYMFONY_FLEX="$(convert_to_boolean_string "${SYMFONY_FLEX:-false}")"
+fi
+export SYMFONY_FLEX
+
+if is_true "${SYMFONY_FLEX}"; then
+    DEFAULT_APP_ENDPOINT=/index.php
+    export WEB_DIRECTORY=${WEB_DIRECTORY:-public}
+
+    if [ "$SYMFONY_WEB_APP_ENV_REWRITE" = "true" ]; then
+        echo 'warning: SYMFONY_WEB_APP_ENV_REWRITE is ignored when using Symfony 4+ folder structure' >&2
+    fi
+elif [ "$SYMFONY_ENV" == "prod" ] || [ "$SYMFONY_WEB_APP_ENV_REWRITE" != "true" ]; then
     DEFAULT_APP_ENDPOINT=/app.php
 else
     DEFAULT_APP_ENDPOINT=/app_${SYMFONY_ENV}.php
